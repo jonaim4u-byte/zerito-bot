@@ -9,6 +9,17 @@
   "riot_region": "europe",
   "ping_everyone": false,
   "rsshub_instances": [
-    "https://rsshub.app"
+    "https://rsshub.app",
+    "https://rsshub.rssforever.com",
+    "https://hub.slarker.me",
+    "https://rss.owo.nz"
+  ],
+  "proxitok_instances": [
+    "https://proxitok.pabloferreiro.es",
+    "https://tok.artemislena.eu",
+    "https://proxitok.privacy.com.de",
+    "https://tt.vern.cc",
+    "https://proxitok.pussthecat.org",
+    "https://tok.habedieeh.re"
   ]
 }

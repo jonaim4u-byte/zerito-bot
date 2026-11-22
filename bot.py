@@ -242,16 +242,49 @@ def tt_rsshub(user):
     raise RuntimeError(f"rsshub: {last}")
 
 
+def _rss_items(body):
+    out = []
+    for it in ET.fromstring(body).iter("item"):
+        link = it.findtext("link", "")
+        m = re.search(r"/video/(\d+)", link)
+        if m:
+            desc = re.sub("<[^>]+>", "", it.findtext("title", "") or "")
+            out.append({"id": m.group(1), "desc": desc, "cover": None, "ts": 0})
+    return out
+
+
+def tt_proxitok(user):
+    last = []
+    for host in CFG.get("proxitok_instances", []):
+        try:
+            code, body = http(f"{host}/@{user}/rss", retries=1, timeout=12)
+            if code != 200: raise RuntimeError(code)
+            out = _rss_items(body)
+            if out: return out
+            raise RuntimeError("no items")
+        except Exception as e:
+            last.append(f"{host}:{str(e)[:40]}")
+    raise RuntimeError("proxitok " + ";".join(last))
+
+
+def tt_embed(user):
+    code, body = http(f"https://www.tiktok.com/embed/@{user}", headers={"Accept-Language": "es-ES,es"})
+    ids = list(dict.fromkeys(re.findall(rb'/video/(\d{15,25})', body)))
+    if code != 200 or not ids:
+        raise RuntimeError(f"embed {code} ids={len(ids)}")
+    return [{"id": i.decode(), "desc": "", "cover": None, "ts": 0} for i in ids]
+
+
 def tiktok(state):
     user = CFG["tiktok_user"]
     errs, items = [], None
-    for fn in (tt_tikwm, tt_profile, tt_rsshub):
+    for fn in (tt_tikwm, tt_embed, tt_profile, tt_proxitok, tt_rsshub):
         try:
             items = fn(user); break
         except Exception as e:
             errs.append(f"{fn.__name__}: {e}")
     if items is None:
-        raise RuntimeError("all TikTok sources failed: " + " | ".join(errs))
+        raise RuntimeError("all TikTok sources failed: " + " | ".join(e[:160] for e in errs))
     st = state.setdefault("tiktok", {"seen": None})
     if st["seen"] is None:
         st["seen"] = [i["id"] for i in items]; return
