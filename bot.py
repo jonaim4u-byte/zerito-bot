@@ -388,7 +388,16 @@ def snap_of(e):
 
 
 # ---------- main ----------
+def load_secrets():
+    """Single multi-line secret BOT_SECRETS (KEY=VALUE per line) -> environment."""
+    for line in os.environ.get("BOT_SECRETS", "").splitlines():
+        if "=" in line and not line.strip().startswith("#"):
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
+
 def main():
+    load_secrets()
     state = json.load(open(STATE_PATH)) if os.path.exists(STATE_PATH) else {}
     only = set(sys.argv[1:])
     for name, fn in (("twitch", twitch), ("youtube", youtube), ("tiktok", tiktok), ("riot", riot)):
