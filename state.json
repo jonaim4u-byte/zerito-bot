@@ -1,6 +1,5 @@
 {
  "errors": {
-  "twitch": "twitch token 400",
   "riot": "401 https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/CAMBIAR/CAMBIAR b'{\"status\":{\"message\":\"Forbidden\",\"status_code\":401}}'"
  },
  "youtube": {
@@ -24,5 +23,10 @@
    "7707787285068008726",
    "7706616499321998614"
   ]
+ },
+ "twitch": {
+  "live": false,
+  "stream_id": null,
+  "off": 0
  }
 }
