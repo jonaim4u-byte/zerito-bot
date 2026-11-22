@@ -1,12 +1,14 @@
 {
   "twitch_login": "zerito_lol",
-  "yt_handle": "@zerito_lol",
-  "yt_channel_id": "",
-  "tiktok_user": "zerito_lol",
+  "yt_handle": "@zeritolol",
+  "yt_channel_id": "UC_GSswbuoxJnMLBfr8WCW-g",
+  "tiktok_user": "zeritolol",
   "riot_name": "CAMBIAR",
   "riot_tag": "CAMBIAR",
   "riot_platform": "euw1",
   "riot_region": "europe",
   "ping_everyone": false,
-  "rsshub_instances": ["https://rsshub.app"]
+  "rsshub_instances": [
+    "https://rsshub.app"
+  ]
 }
