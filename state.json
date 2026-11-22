@@ -1,0 +1,6 @@
+{
+ "errors": {
+  "youtube": "could not resolve YouTube channel id; set yt_channel_id in config.json",
+  "tiktok": "all TikTok sources failed: tt_tikwm: 403 https://www.tikwm.com/api/user/posts?unique_id=zerito_lol&count=10 b'<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"C"
+ }
+}
