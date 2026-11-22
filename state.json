@@ -1,6 +1,6 @@
 {
  "errors": {
-  "riot": "401 https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/CAMBIAR/CAMBIAR b'{\"status\":{\"message\":\"Forbidden\",\"status_code\":401}}'"
+  "riot": "401 https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/El%20Zero/SHACO b'{\"status\":{\"message\":\"Unknown apikey\",\"status_code\":401}}'"
  },
  "youtube": {
   "seen": [
