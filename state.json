@@ -1,6 +1,15 @@
 {
  "errors": {
-  "youtube": "could not resolve YouTube channel id; set yt_channel_id in config.json",
-  "tiktok": "all TikTok sources failed: tt_tikwm: 403 https://www.tikwm.com/api/user/posts?unique_id=zerito_lol&count=10 b'<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"C"
+  "tiktok": "all TikTok sources failed: tt_tikwm: 403 https://www.tikwm.com/api/user/posts?unique_id=zeritolol&count=10 b'<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Co",
+  "twitch": "twitch token 400",
+  "riot": "401 https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/CAMBIAR/CAMBIAR b'{\"status\":{\"message\":\"Forbidden\",\"status_code\":401}}'"
+ },
+ "youtube": {
+  "seen": [
+   "4Z7URJkFeA0"
+  ]
+ },
+ "riot": {
+  "seen": null
  }
 }
