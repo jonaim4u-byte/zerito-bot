@@ -54,9 +54,9 @@
   ]
  },
  "twitch": {
-  "live": true,
-  "stream_id": "318456669795",
-  "off": 1,
+  "live": false,
+  "stream_id": null,
+  "off": 0,
   "started": "2026-11-23T19:30:06Z",
   "game": "League of Legends"
  },
