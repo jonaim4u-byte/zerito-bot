@@ -1,14 +1,35 @@
 {
- "errors": {
-  "riot": "401 https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/El%20Zero/SHACO b'{\"status\":{\"message\":\"Unknown apikey\",\"status_code\":401}}'"
- },
+ "errors": {},
  "youtube": {
   "seen": [
    "4Z7URJkFeA0"
   ]
  },
  "riot": {
-  "seen": null
+  "seen": [
+   "EUW1_8053698338",
+   "EUW1_8053673558",
+   "EUW1_8053630270",
+   "EUW1_8053595735",
+   "EUW1_8053488330",
+   "EUW1_8053455927",
+   "EUW1_8053419036",
+   "EUW1_8053383663",
+   "EUW1_8053329450",
+   "EUW1_8053301258",
+   "EUW1_8053257365",
+   "EUW1_8053241334",
+   "EUW1_8051607120",
+   "EUW1_8051560794",
+   "EUW1_8051510238"
+  ],
+  "puuid": "cHDEDuumbjD1dshZP1lrgQFgk80jIJ4_CzyTeY68JSCLrYRVoseVms-e4f-o7z-RiDZawqRwcUfQ2g",
+  "snap": {
+   "tier": "MASTER",
+   "div": "I",
+   "lp": 1020,
+   "v": 3820
+  }
  },
  "tiktok": {
   "seen": [
@@ -29,5 +50,16 @@
   "live": false,
   "stream_id": null,
   "off": 0
+ },
+ "clips": {
+  "seen": [
+   "RamshackleSullenFennelCopyThis-A-oL4jSLHC5YZUWa",
+   "QuaintRenownedBearChefFrank-jCOUave5PhvUcUBt",
+   "ManlySmallPuppyDoubleRainbow-H4u9_5bCQJV2LL9Z",
+   "FancyAthleticGarlicM4xHeh-bpp4QoZBEbwO8Ouz",
+   "OilyConcernedCrocodileDancingBaby-TeTCOuFRzS1zKDwU",
+   "AliveObeseSharkTheThing-UPM-tuh8XbmRMg3G"
+  ],
+  "uid": "441102710"
  }
 }
