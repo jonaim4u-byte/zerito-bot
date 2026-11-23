@@ -6,7 +6,7 @@ State is kept in state.json (committed by the workflow) so nothing is posted twi
 """
 import io, json, os, re, sys, time, uuid, urllib.request, urllib.error, urllib.parse
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_PATH = os.path.join(HERE, "state.json")
@@ -95,24 +95,59 @@ def clear_error(state, key):
 
 def brand(embed, color=PINK):
     embed["color"] = color
-    embed["footer"] = {"text": "Zerito_Lol · Casa de Shaco"}
+    embed["footer"] = {"text": "Zerito_Lol · Kingdom of Madness"}
     return embed
 
 
+
+# ---------- shared drawing helpers ----------
+def _font(sz, bold=False):
+    from PIL import ImageFont
+    for p in (["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"] if bold else []) + \
+             ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "DejaVuSans.ttf"]:
+        try: return ImageFont.truetype(p, sz)
+        except Exception: pass
+    return ImageFont.load_default()
+
+
+def _wrap(d, text, font, maxw, maxlines):
+    words, lines, cur = text.split(), [], ""
+    for w in words:
+        t = (cur + " " + w).strip()
+        if d.textlength(t, font=font) <= maxw: cur = t
+        else:
+            if cur: lines.append(cur)
+            cur = w
+    if cur: lines.append(cur)
+    if len(lines) > maxlines:
+        lines = lines[:maxlines]; lines[-1] = lines[-1].rstrip(" .,") + "…"
+    return lines
+
+
 # ---------- Twitch ----------
-def twitch(state):
+_TW = {}
+
+
+def twitch_headers():
+    """App access token (client credentials), cached per run. Shared by live alerts and clips."""
+    if "hd" in _TW: return _TW["hd"]
     cid, sec = os.environ.get("TWITCH_CLIENT_ID"), os.environ.get("TWITCH_CLIENT_SECRET")
-    if not (cid and sec):
-        print("[skip] twitch secrets"); return
-    login = CFG["twitch_login"]
     code, body = http("https://id.twitch.tv/oauth2/token", "POST",
                       {"Content-Type": "application/x-www-form-urlencoded"},
                       urllib.parse.urlencode({"client_id": cid, "client_secret": sec,
                                               "grant_type": "client_credentials"}).encode())
     if code != 200:
         raise RuntimeError(f"twitch token {code}")
-    tok = json.loads(body)["access_token"]
-    hd = {"Client-Id": cid, "Authorization": f"Bearer {tok}"}
+    _TW["hd"] = {"Client-Id": cid, "Authorization": f"Bearer {json.loads(body)['access_token']}"}
+    return _TW["hd"]
+
+
+def twitch(state):
+    cid, sec = os.environ.get("TWITCH_CLIENT_ID"), os.environ.get("TWITCH_CLIENT_SECRET")
+    if not (cid and sec):
+        print("[skip] twitch secrets"); return
+    login = CFG["twitch_login"]
+    hd = twitch_headers()
     data = jget("https://api.twitch.tv/helix/streams?user_login=" + login, hd)["data"]
     st = state.setdefault("twitch", {"live": False, "stream_id": None, "off": 0})
     link = f"https://twitch.tv/{login}"
@@ -141,6 +176,40 @@ def twitch(state):
             webhook("WEBHOOK_TWITCH", embed=brand({"title": "⚫ El directo ha terminado",
                     "description": f"Gracias por venir. {dur}\nMañana, sobre las 18:00 (hora española), más. [Canal]({link})"}, PURPLE))
             st.update(live=False, stream_id=None, off=0)
+
+
+
+def twitch_clips(state):
+    """Publish every new public clip of the channel (clips are polled; Twitch has no webhook for clips)."""
+    if not os.environ.get("WEBHOOK_CLIPS"):
+        print("[skip] WEBHOOK_CLIPS not set"); return
+    if not (os.environ.get("TWITCH_CLIENT_ID") and os.environ.get("TWITCH_CLIENT_SECRET")):
+        print("[skip] twitch secrets"); return
+    hd = twitch_headers(); login = CFG["twitch_login"]
+    st = state.setdefault("clips", {"seen": None})
+    if not st.get("uid"):
+        st["uid"] = jget("https://api.twitch.tv/helix/users?login=" + login, hd)["data"][0]["id"]
+    since = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    data = jget(f"https://api.twitch.tv/helix/clips?broadcaster_id={st['uid']}&first=50&started_at={since}", hd)["data"]
+    if st["seen"] is None:  # first run: seed silently, never flood the channel
+        st["seen"] = [c["id"] for c in data]; return
+    games = st.setdefault("games", {})
+    for c in sorted(data, key=lambda c: c["created_at"]):
+        if c["id"] in st["seen"]:
+            continue
+        gid = c.get("game_id")
+        if gid and gid not in games:
+            try: games[gid] = jget("https://api.twitch.tv/helix/games?id=" + gid, hd)["data"][0]["name"]
+            except Exception: games[gid] = ""
+        fields = [{"name": "Creado por", "value": c.get("creator_name") or "—", "inline": True},
+                  {"name": "Duración", "value": f"{int(round(c.get('duration', 0)))} s", "inline": True}]
+        if games.get(gid): fields.insert(1, {"name": "Juego", "value": games[gid], "inline": True})
+        webhook("WEBHOOK_CLIPS", embed=brand({"title": "🎬 " + (c.get("title") or "Nuevo clip"), "url": c["url"],
+                "description": f"Nuevo clip de **{c.get('broadcaster_name', login)}** en Twitch.\n[▶ Ver el clip]({c['url']})",
+                "fields": fields, "image": {"url": c["thumbnail_url"]},
+                "author": {"name": "Zerito_Lol · Clips de Twitch"}}))
+        st["seen"].append(c["id"])
+    st["seen"] = st["seen"][-300:]
 
 
 # ---------- YouTube ----------
@@ -275,6 +344,49 @@ def tt_embed(user):
     return [{"id": i.decode(), "desc": "", "cover": None, "ts": 0} for i in ids]
 
 
+
+def tt_meta(url):
+    """Official public oEmbed: title, author and thumbnail of a TikTok (works without login)."""
+    try:
+        code, body = http("https://www.tiktok.com/oembed?url=" + urllib.parse.quote(url, safe=""), retries=1, timeout=12)
+        if code == 200: return json.loads(body)
+    except Exception as e:
+        print("oembed failed:", str(e)[:100])
+    return {}
+
+
+def tt_card(title, author, thumb):
+    """Branded 'Holo Glass' card: thumbnail + title + creator. Returns PNG bytes."""
+    from PIL import Image, ImageDraw
+    W, H = 1000, 520
+    img = Image.new("RGB", (W, H), (12, 8, 22)); d = ImageDraw.Draw(img)
+    for x in range(W):
+        t = x / W; d.line([(x, 0), (x, H)], fill=(int(18 + 52 * t), int(8 + 6 * t), int(40 + 46 * t)))
+    d.rectangle([0, 0, W - 1, H - 1], outline=(255, 46, 154), width=3)
+    ov = Image.new("RGBA", (W, H), (0, 0, 0, 0)); od = ImageDraw.Draw(ov)
+    od.rounded_rectangle([300, 28, W - 28, H - 28], 26, fill=(255, 255, 255, 22), outline=(255, 120, 200, 120), width=2)
+    img = Image.alpha_composite(img.convert("RGBA"), ov).convert("RGB"); d = ImageDraw.Draw(img)
+    ph = Image.new("RGB", (240, 426), (40, 30, 70))
+    if thumb:
+        try:
+            im = Image.open(io.BytesIO(thumb)).convert("RGB"); r = max(240 / im.width, 426 / im.height)
+            im = im.resize((int(im.width * r) + 1, int(im.height * r) + 1)); x0, y0 = (im.width - 240) // 2, (im.height - 426) // 2
+            ph = im.crop((x0, y0, x0 + 240, y0 + 426))
+        except Exception: pass
+    m = Image.new("L", (240, 426), 0); ImageDraw.Draw(m).rounded_rectangle([0, 0, 239, 425], 22, fill=255)
+    d.rounded_rectangle([34, 40, 286, 482], 28, fill=(255, 46, 154)); img.paste(ph, (40, 47), m)
+    d.text((330, 52), "NUEVO TIKTOK", font=_font(26, True), fill=(255, 120, 200))
+    d.text((W - 250, 52), "ZERITO_LOL", font=_font(26, True), fill=(255, 255, 255))
+    f = _font(40, True)
+    y = 118
+    for ln in _wrap(d, title or "Nuevo vídeo en TikTok", f, W - 330 - 60, 5):
+        d.text((330, y), ln, font=f, fill=(255, 255, 255)); y += 54
+    d.text((330, H - 120), f"@{author}", font=_font(30, True), fill=(220, 190, 255))
+    d.rounded_rectangle([330, H - 76, 600, H - 40], 18, fill=(255, 46, 154))
+    d.text((352, H - 71), "▶  Ver en TikTok", font=_font(22, True), fill=(255, 255, 255))
+    out = io.BytesIO(); img.save(out, "PNG"); return out.getvalue()
+
+
 def tiktok(state):
     user = CFG["tiktok_user"]
     errs, items = [], None
@@ -292,10 +404,24 @@ def tiktok(state):
         if it["id"] in st["seen"]:
             continue
         url = f"https://www.tiktok.com/@{user}/video/{it['id']}"
-        emb = {"title": "Nuevo TikTok", "url": url, "description": (it["desc"] or "")[:300],
-               "author": {"name": f"@{user} · TikTok"}}
-        if it.get("cover"): emb["image"] = {"url": it["cover"]}
-        webhook("WEBHOOK_TIKTOK", embed=brand(emb))
+        meta = tt_meta(url)
+        title = (meta.get("title") or it["desc"] or "").strip()
+        cover = meta.get("thumbnail_url") or it.get("cover")
+        emb = {"title": (title[:240] or "Nuevo TikTok"), "url": url,
+               "description": f"Nuevo TikTok de **@{user}**\n[▶ Ver en TikTok]({url})",
+               "author": {"name": f"@{meta.get('author_unique_id') or user} · TikTok"}}
+        sent = False
+        try:  # rich branded card; any failure falls back to the plain embed so the notification never breaks
+            thumb = http(cover, retries=1, timeout=15)[1] if cover else None
+            png = tt_card(title, user, thumb)
+            emb["image"] = {"url": "attachment://tiktok.png"}
+            webhook("WEBHOOK_TIKTOK", embed=brand(emb), image=("tiktok.png", png)); sent = True
+        except Exception as e:
+            print("tiktok card failed, plain embed:", str(e)[:120])
+        if not sent:
+            emb.pop("image", None)
+            if cover: emb["image"] = {"url": cover}
+            webhook("WEBHOOK_TIKTOK", embed=brand(emb))
         st["seen"].append(it["id"])
     st["seen"] = st["seen"][-200:]
 
@@ -317,26 +443,22 @@ def riot_get(path, host):
     return jget(f"https://{host}.api.riotgames.com{path}", {"X-Riot-Token": os.environ["RIOT_API_KEY"]})
 
 
-def render_card(m, rank_txt, lp_txt, icon_bytes=None):
-    from PIL import Image, ImageDraw, ImageFont
-    W, H = 900, 260
-    win = m["win"]
-    img = Image.new("RGB", (W, H), (14, 10, 24))
-    d = ImageDraw.Draw(img)
-    for x in range(W):  # horizontal gradient
-        t = x / W
-        base = (int(30 + 60 * t), int(12 + 8 * t), int(52 + 40 * t)) if win else (int(24 + 20 * t), int(16 + 6 * t), int(40 + 22 * t))
-        d.line([(x, 0), (x, H)], fill=base)
-    accent = (255, 46, 154) if win else (140, 120, 190)
-    d.rectangle([0, 0, 10, H], fill=accent)
+QUEUES = {420: "Clasificatoria Solo/Dúo", 440: "Clasificatoria Flexible", 450: "ARAM", 400: "Normal Reclutamiento",
+          430: "Normal a ciegas", 490: "Partida rápida", 700: "Clash", 480: "Normal Swiftplay"}
 
-    def font(sz, bold=False):
-        for p in (["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"] if bold else []) + \
-                 ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "DejaVuSans.ttf"]:
-            try: return ImageFont.truetype(p, sz)
-            except Exception: pass
-        return ImageFont.load_default()
-    # champion icon
+
+def render_card(m, rank_txt, lp_txt, icon_bytes=None):
+    """Branded result card. m: win, remake, champ, queue, k, d, a, cs, dur, when."""
+    from PIL import Image, ImageDraw
+    W, H = 900, 260
+    win, remake = m["win"], m.get("remake")
+    img = Image.new("RGB", (W, H), (14, 10, 24)); d = ImageDraw.Draw(img)
+    for x in range(W):
+        t = x / W
+        base = (int(30 + 60 * t), int(12 + 8 * t), int(52 + 40 * t)) if win and not remake else (int(24 + 20 * t), int(16 + 6 * t), int(40 + 22 * t))
+        d.line([(x, 0), (x, H)], fill=base)
+    accent = (255, 46, 154) if win and not remake else (140, 120, 190)
+    d.rectangle([0, 0, 10, H], fill=accent)
     ic = Image.new("RGB", (150, 150), (40, 30, 70))
     if icon_bytes:
         try: ic = Image.open(io.BytesIO(icon_bytes)).convert("RGB").resize((150, 150))
@@ -345,21 +467,24 @@ def render_card(m, rank_txt, lp_txt, icon_bytes=None):
     ring = Image.new("RGB", (166, 166), accent); rm = Image.new("L", (166, 166), 0)
     ImageDraw.Draw(rm).ellipse([0, 0, 165, 165], fill=255)
     img.paste(ring, (34, 46), rm); img.paste(ic, (42, 54), mask)
-    d.text((34, 14), "VICTORIA" if win else "DERROTA", font=font(22, True), fill=accent)
-    d.text((230, 22), m["champ"], font=font(34, True), fill=(255, 255, 255))
-    d.text((230, 70), f"{m['k']} / {m['d']} / {m['a']}", font=font(52, True), fill=(255, 255, 255))
+    label = "REMAKE" if remake else ("VICTORIA" if win else "DERROTA")
+    d.text((34, 14), label, font=_font(22, True), fill=accent)
+    d.text((230, 22), m["champ"], font=_font(34, True), fill=(255, 255, 255))
+    d.text((230, 70), f"{m['k']} / {m['d']} / {m['a']}", font=_font(52, True), fill=(255, 255, 255))
     kda = (m["k"] + m["a"]) / max(1, m["d"])
     d.text((230, 138), f"{kda:.2f} KDA   ·   {m['cs']} CS ({m['cs'] / max(1, m['dur'] / 60):.1f}/min)   ·   {m['dur'] // 60}:{m['dur'] % 60:02d}",
-           font=font(22), fill=(220, 210, 240))
-    d.text((230, 186), f"{rank_txt}", font=font(26, True), fill=(255, 150, 210))
+           font=_font(22), fill=(220, 210, 240))
+    d.text((230, 186), rank_txt or m["queue"], font=_font(26, True), fill=(255, 150, 210))
     if lp_txt:
-        d.text((230, 222), lp_txt, font=font(22, True), fill=(255, 255, 255) if win else (200, 190, 230))
-    d.text((W - 250, H - 34), m["when"], font=font(18), fill=(170, 160, 200))
-    d.text((W - 250, 16), "ZERITO_LOL", font=font(22, True), fill=(255, 120, 200))
+        d.text((230, 222), lp_txt, font=_font(22, True), fill=(255, 255, 255) if win else (200, 190, 230))
+    d.text((W - 250, H - 34), m["when"], font=_font(18), fill=(170, 160, 200))
+    d.text((W - 250, 16), "ZERITO_LOL", font=_font(22, True), fill=(255, 120, 200))
     out = io.BytesIO(); img.save(out, "PNG"); return out.getvalue()
 
 
 def riot(state):
+    """Every finished LoL game (ranked, flex, ARAM, normals) -> branded card in #zerito-stats (WEBHOOK_STATS);
+    Solo/Duo games additionally go to the ranked channel (WEBHOOK_RANKED) with LP change. No duplicates."""
     if not os.environ.get("RIOT_API_KEY"):
         print("[skip] RIOT_API_KEY"); return
     plat, reg = CFG.get("riot_platform", "euw1"), CFG.get("riot_region", "europe")
@@ -370,7 +495,7 @@ def riot(state):
     puuid = st["puuid"]
     entries = riot_get(f"/lol/league/v4/entries/by-puuid/{puuid}", plat)
     solo = next((e for e in entries if e["queueType"] == "RANKED_SOLO_5x5"), None)
-    ids = riot_get(f"/lol/match/v5/matches/by-puuid/{puuid}/ids?queue=420&count=10", reg)  # queue 420 = Ranked Solo/Duo
+    ids = riot_get(f"/lol/match/v5/matches/by-puuid/{puuid}/ids?count=15", reg)  # all queues
     if st["seen"] is None:  # first run: just remember current state
         st["seen"] = ids; st["snap"] = snap_of(solo); return
     new = [i for i in reversed(ids) if i not in st["seen"]]
@@ -379,38 +504,50 @@ def riot(state):
     ver = None
     try: ver = jget("https://ddragon.leagueoflegends.com/api/versions.json")[0]
     except Exception: pass
-    prev = st.get("snap")
-    cur = snap_of(solo)
+    prev, cur = st.get("snap"), snap_of(solo)
     total = (cur["v"] - prev["v"]) if (cur and prev) else None
-    for n, mid in enumerate(new):
+    ranked_new = []  # ids of Solo/Duo games among the new ones, in order
+    for mid in new:
         info = riot_get(f"/lol/match/v5/matches/{mid}", reg)["info"]
-        if info.get("queueId") != 420:
-            st["seen"].append(mid); continue
-        p = next(x for x in info["participants"] if x["puuid"] == puuid)
+        if info.get("queueId") == 420: ranked_new.append(mid)
+        p = next((x for x in info["participants"] if x["puuid"] == puuid), None)
+        qid = info.get("queueId")
+        if p is None or qid == 1700 or qid not in QUEUES and info.get("gameMode") not in ("ARAM", "CLASSIC"):
+            st["seen"].append(mid); continue  # Arena / unknown modes: no card (no honest win/loss for them)
         end = datetime.fromtimestamp(info["gameEndTimestamp"] / 1000, timezone.utc).astimezone()
-        m = {"win": p["win"], "champ": p["championName"], "k": p["kills"], "d": p["deaths"], "a": p["assists"],
+        remake = bool(p.get("gameEndedInEarlySurrender")) or info["gameDuration"] < 300
+        m = {"win": p["win"], "remake": remake, "champ": p["championName"], "k": p["kills"], "d": p["deaths"], "a": p["assists"],
              "cs": p["totalMinionsKilled"] + p.get("neutralMinionsKilled", 0), "dur": int(info["gameDuration"]),
+             "queue": QUEUES.get(qid, "ARAM" if info.get("gameMode") == "ARAM" else "Partida"),
              "when": end.strftime("%d/%m/%Y %H:%M")}
-        last = n == len(new) - 1
-        lp_txt = ""
-        if last and total is not None:
+        is_ranked = qid == 420
+        lp_txt = rank_txt = ""
+        if is_ranked and not remake and mid == new[-1] and total is not None:
             lp_txt = f"{'+' if total >= 0 else ''}{total} LP"
-        rank_txt = ""
-        if cur:
+        if is_ranked and cur and mid == new[-1]:
             rank_txt = (f"{TIER_ES[cur['tier']]} {cur['lp']} LP" if TIERS.index(cur["tier"]) >= 7
-                        else f"{TIER_ES[cur['tier']]} {cur['div']} · {cur['lp']} LP") if last else ""
+                        else f"{TIER_ES[cur['tier']]} {cur['div']} · {cur['lp']} LP")
         icon = None
         if ver:
             try: icon = http(f"https://ddragon.leagueoflegends.com/cdn/{ver}/img/champion/{p['championName']}.png")[1]
             except Exception: pass
-        png = render_card(m, rank_txt or "Clasificatoria Solo/Dúo", lp_txt, icon)
-        opgg = f"https://www.op.gg/summoners/{plat[:-1] if plat[-1].isdigit() else plat}/{urllib.parse.quote(CFG['riot_name'])}-{CFG['riot_tag']}"
-        webhook("WEBHOOK_RANKED", image=("partida.png", png),
-                embed=brand({"title": f"{'Victoria' if m['win'] else 'Derrota'} con {m['champ']}",
-                             "url": opgg, "description": f"[Ver perfil en OP.GG]({opgg})",
-                             "image": {"url": "attachment://partida.png"}}, PINK if m["win"] else PURPLE))
+        png = render_card(m, rank_txt, lp_txt, icon)
+        name, tag = CFG["riot_name"], CFG["riot_tag"]
+        opgg = f"https://www.op.gg/summoners/{plat[:-1] if plat[-1].isdigit() else plat}/{urllib.parse.quote(name)}-{tag}"
+        ugg = f"https://u.gg/lol/profile/{plat}/{urllib.parse.quote(name.lower())}-{tag.lower()}/overview"
+        title = ("Remake" if remake else "Victoria" if m["win"] else "Derrota") + f" con {m['champ']} · {m['queue']}"
+        emb = brand({"title": title, "url": opgg,
+                     "description": f"[Historial en OP.GG]({opgg}) · [U.GG]({ugg})",
+                     "image": {"url": "attachment://partida.png"}}, PINK if m["win"] and not remake else PURPLE)
+        emb["footer"]["text"] += f" · {mid}"
+        sent = False
+        if os.environ.get("WEBHOOK_STATS"):
+            webhook("WEBHOOK_STATS", image=("partida.png", png), embed=emb); sent = True
+        if is_ranked and os.environ.get("WEBHOOK_RANKED"):
+            webhook("WEBHOOK_RANKED", image=("partida.png", png), embed=emb); sent = True
+        if not sent: print("[skip] no stats webhook configured; game not marked as seen"); continue
         st["seen"].append(mid)
-    st["seen"] = st["seen"][-100:]
+    st["seen"] = st["seen"][-150:]
     st["snap"] = cur or prev
 
 
@@ -433,7 +570,7 @@ def main():
     load_secrets()
     state = json.load(open(STATE_PATH)) if os.path.exists(STATE_PATH) else {}
     only = set(sys.argv[1:])
-    for name, fn in (("twitch", twitch), ("youtube", youtube), ("tiktok", tiktok), ("riot", riot)):
+    for name, fn in (("twitch", twitch), ("clips", twitch_clips), ("youtube", youtube), ("tiktok", tiktok), ("riot", riot)):
         if only and name not in only:
             continue
         try:
