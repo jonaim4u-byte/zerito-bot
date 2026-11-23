@@ -21,14 +21,15 @@
    "EUW1_8053241334",
    "EUW1_8051607120",
    "EUW1_8051560794",
-   "EUW1_8051510238"
+   "EUW1_8051510238",
+   "EUW1_8055381908"
   ],
   "puuid": "cHDEDuumbjD1dshZP1lrgQFgk80jIJ4_CzyTeY68JSCLrYRVoseVms-e4f-o7z-RiDZawqRwcUfQ2g",
   "snap": {
    "tier": "MASTER",
    "div": "I",
-   "lp": 1020,
-   "v": 3820
+   "lp": 989,
+   "v": 3789
   }
  },
  "tiktok": {
@@ -49,9 +50,9 @@
  },
  "twitch": {
   "live": true,
-  "stream_id": "318456529123",
+  "stream_id": "318456669795",
   "off": 0,
-  "started": "2026-11-23T19:21:11Z",
+  "started": "2026-11-23T19:30:06Z",
   "game": "League of Legends"
  },
  "clips": {
