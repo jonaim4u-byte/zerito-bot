@@ -1,7 +1,6 @@
 {
  "errors": {
-  "riot": "401 https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/cHDEDuumbjD1dshZP1lrgQFgk80jIJ4_CzyTeY68JSCLrYRVoseVms-e4f-o7z-RiDZawqRwcUfQ2g b'{\"status\":{\"message\":\"Unknown apikey\",\"status_code\":4",
-  "youtube": "HTTP failed https://www.youtube.com/feeds/videos.xml?channel_id=UC_GSswbuoxJnMLBfr8WCW-g: HTTP Error 503: Service Unavailable"
+  "riot": "401 https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/cHDEDuumbjD1dshZP1lrgQFgk80jIJ4_CzyTeY68JSCLrYRVoseVms-e4f-o7z-RiDZawqRwcUfQ2g b'{\"status\":{\"message\":\"Unknown apikey\",\"status_code\":4"
  },
  "youtube": {
   "seen": [
