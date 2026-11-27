@@ -59,7 +59,7 @@
  "twitch": {
   "live": true,
   "stream_id": "318428304482",
-  "off": 0,
+  "off": 1,
   "started": "2026-11-26T18:53:34Z",
   "game": "League of Legends"
  },
